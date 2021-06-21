@@ -21,6 +21,8 @@ import os
 from os.path import dirname
 import shutil
 
+from pathlib import Path
+
 import toml
 import click
 
@@ -30,6 +32,10 @@ log = get_logger('broker-config')
 
 _config_dir = click.get_app_dir('piker')
 _file_name = 'brokers.toml'
+
+
+class BrokerConfigurationError(BaseException):
+    ...
 
 
 def _override_config_dir(
@@ -64,20 +70,21 @@ def repodir():
 
 
 def load(
-    path: str = None
+    conf_path: str = None
 ) -> (dict, str):
     """Load broker config.
     """
-    path = path or get_broker_conf_path()
-    if not os.path.isfile(path):
+    conf_path = conf_path or get_broker_conf_path()
+    Path(conf_path).parent.mkdir(exist_ok=True)
+    if not os.path.isfile(conf_path):
         shutil.copyfile(
             os.path.join(repodir(), 'data/brokers.toml'),
-            path,
+            conf_path,
         )
 
-    config = toml.load(path)
-    log.debug(f"Read config file {path}")
-    return config, path
+    config = toml.load(conf_path)
+    log.debug(f"Read config file {conf_path}")
+    return config, conf_path
 
 
 def write(
