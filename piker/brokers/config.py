@@ -21,6 +21,7 @@ import os
 from os.path import dirname
 import shutil
 
+from typing import Optional
 from pathlib import Path
 
 import toml
@@ -70,7 +71,8 @@ def repodir():
 
 
 def load(
-    conf_path: str = None
+    conf_path: str = None,
+    raw: bool = False
 ) -> (dict, str):
     """Load broker config.
     """
@@ -82,13 +84,18 @@ def load(
             conf_path,
         )
 
-    config = toml.load(conf_path)
+    if raw:
+        with open(conf_path, 'r') as cf:
+            config = cf.read()
+    else:
+        config = toml.load(conf_path)
     log.debug(f"Read config file {conf_path}")
     return config, conf_path
 
 
 def write(
-    config: dict,  # toml config as dict
+    config: Optional[dict] = None,  # toml config as dict
+    raw: Optional[str] = None,  # toml config as string
     path: str = None,
 ) -> None:
     """Write broker config to disk.
@@ -96,15 +103,63 @@ def write(
     Create a ``brokers.ini`` file if one does not exist.
     """
     path = path or get_broker_conf_path()
-    dirname = os.path.dirname(path)
-    if not os.path.isdir(dirname):
-        log.debug(f"Creating config dir {_config_dir}")
-        os.makedirs(dirname)
+    Path(path).parent.mkdir(exist_ok=True)
 
-    if not config:
+    if not config and not raw:
         raise ValueError(
             "Watch out you're trying to write a blank config!")
 
     log.debug(f"Writing config file {path}")
     with open(path, 'w') as cf:
-        return toml.dump(config, cf)
+        if config:
+            return toml.dump(config, cf)
+        elif raw:
+            return cf.write(raw)
+
+
+# XXX: Recursive getting & setting
+
+def get_value(_dict, _section):
+    subs = _section.split('.')
+    if len(subs) > 1:
+        return get_value(
+            _dict[subs[0]],
+            '.'.join(subs[1:]),
+        )
+
+    else:
+        return _dict[_section]
+
+
+def set_value(_dict, _section, val):
+    subs = _section.split('.')
+    if len(subs) > 1:
+        if subs[0] not in _dict:
+            _dict[subs[0]] = {}
+
+        return set_value(
+            _dict[subs[0]],
+            '.'.join(subs[1:]),
+            val
+        )
+
+    else:
+        _dict[_section] = val
+
+
+def del_value(_dict, _section):
+    subs = _section.split('.')
+    if len(subs) > 1:
+        if subs[0] not in _dict:
+            return
+
+        return del_value(
+            _dict[subs[0]],
+            '.'.join(subs[1:])
+        )
+
+    else:
+        if _section not in _dict:
+            return
+
+        del _dict[_section]
